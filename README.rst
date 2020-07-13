@@ -1,4 +1,21 @@
-marathon-envoy-poc
+==========
+# Start xDS Server:
+cd marathon_envoy_poc
+python app.py
+
+# Start envoy proxy
+./start-envoy.sh
+
+# Start upstream
+./upstream.sh
+
+# Veryfy control plane
+curl -X POST localhost:5000/v2/discovery:listeners
+# Verify proxy config
+http://127.0.0.1:9901/config_dump
+
+
+envoy-poc
 ==================
 
 Please see Relay_ for a more complete implementation.
@@ -12,10 +29,11 @@ Envoy as an "edge" proxy in an attempt to replace marathon-lb.
 - REST-JSON implementation (production version should probably use gRPC)
 - Will implement all four xDS APIs:
 
-  - Cluster Discovery Service (CDS)
-  - Endpoint Discovery Service (EDS)
+
   - Listener Discovery Service (LDS)
   - Route Discovery Service (RDS)
+  - Cluster Discovery Service (CDS)
+  - Endpoint Discovery Service (EDS)
 
 
 Usage
