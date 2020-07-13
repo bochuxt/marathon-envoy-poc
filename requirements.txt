@@ -1,0 +1,7 @@
+#-e .[lint]
+# coverage
+
+cryptography
+flask
+pem=="20.1.0"
+requests

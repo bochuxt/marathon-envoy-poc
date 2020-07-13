@@ -138,6 +138,7 @@ def get_number_of_app_ports(app):
     :return: The number of ports for the app.
     """
     mode = _get_networking_mode(app)
+    print(" mode:", mode)
     ports_list = None
     if mode == 'host':
         ports_list = _get_port_definitions(app)
@@ -146,7 +147,7 @@ def get_number_of_app_ports(app):
         if ports_list is None:
             ports_list = _get_container_port_mappings(app)
     elif mode == 'container':
-        ports_list = _get_ip_address_discovery_ports(app)
+        ports_list =[80] #_get_ip_address_discovery_ports(app)
         # Marathon 1.5+: the ipAddress field is missing -> ports_list is None
         # Marathon <1.5: the ipAddress field can be present, but ports_list can
         # still be empty while the container port mapping is not :-/
@@ -164,21 +165,21 @@ def _get_networking_mode(app):
     Get the Marathon networking mode for the app.
     """
     # Marathon 1.5+: there is a `networks` field
-    networks = app.get('networks')
-    if networks:
-        # Modes cannot be mixed, so assigning the last mode is fine
-        return networks[-1].get('mode', 'container')
+    # networks = app.get('networks')
+    # if networks:
+    #     # Modes cannot be mixed, so assigning the last mode is fine
+    #     return networks[-1].get('mode', 'container')
 
-    # Older Marathon: determine equivalent network mode
-    container = app.get('container')
-    if container is not None and 'docker' in container:
-        docker_network = container['docker'].get('network')
-        if docker_network == 'USER':
-            return 'container'
-        elif docker_network == 'BRIDGE':
-            return 'container/bridge'
+    # # Older Marathon: determine equivalent network mode
+    # container = app.get('container')
+    # if container is not None and 'docker' in container:
+    #     docker_network = container['docker'].get('network')
+    #     if docker_network == 'USER':
+    #         return 'container'
+    #     elif docker_network == 'BRIDGE':
+    #         return 'container/bridge'
 
-    return 'container' if _is_legacy_ip_per_task(app) else 'host'
+    return 'container' #if _is_legacy_ip_per_task(app) else 'host'
 
 
 def _get_container_port_mappings(app):
@@ -216,9 +217,9 @@ def _get_ip_address_discovery_ports(app):
     """
     Get the ports from the ``ipAddress`` field for the app if present.
     """
-    if not _is_legacy_ip_per_task(app):
-        return None
-    return app['ipAddress']['discovery']['ports']
+    # if not _is_legacy_ip_per_task(app):
+    #     return None
+    return 80 #app['ipAddress']['discovery']['ports']
 
 
 def _is_legacy_ip_per_task(app):
@@ -227,4 +228,4 @@ def _is_legacy_ip_per_task(app):
     :param app: The application to check.
     :return: True if using IP per task, False otherwise.
     """
-    return app.get('ipAddress') is not None
+    return True #app.get('ipAddress') is not None

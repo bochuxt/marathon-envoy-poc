@@ -3,22 +3,22 @@ import os
 
 from flask import Flask, g, jsonify, request
 
-from .certs import (
+from certs import (
     cert_fingerprint, fullchain_pem_str, key_pem_str, load_cert_obj,
     load_chain_objs, load_key_obj)
-from .envoy import (
+from envoy import (
     Cluster, ClusterLoadAssignment, CommonTlsContext, ConfigSource,
     DiscoveryResponse, Filter, FilterChain, HealthCheck, HttpConnectionManager,
     LbEndpoint, Listener, RouteConfiguration, VirtualHost)
-from .marathon import (
+from marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports)
-from .vault import VaultClient
+from vault import VaultClient
 
 # Don't name the flask app 'app' as is usually done as it's easy to mix up with
 # a Marathon app
 flask_app = Flask(__name__)
-flask_app.config.from_object(
-    os.environ.get("APP_CONFIG", "marathon_envoy_poc.config.DevConfig"))
+# flask_app.config.from_object(
+#     os.environ.get("APP_CONFIG", "marathon_envoy_poc.config.DevConfig"))
 
 
 TYPE_LDS = "type.googleapis.com/envoy.api.v2.Listener"
@@ -26,25 +26,78 @@ TYPE_RDS = "type.googleapis.com/envoy.api.v2.RouteConfiguration"
 TYPE_CDS = "type.googleapis.com/envoy.api.v2.Cluster"
 TYPE_EDS = "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment"
 
+CLUSTER_CONNECT_TIMEOUT = 5
+CLUSTER_HEALTHCHECK_TIMEOUT = 5
+CLUSTER_HEALTHCHECK_INTERVAL = 30
+CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD = 3
+CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD = 1
 
-def connect_marathon():
-    client = MarathonClient(flask_app.config["MARATHON"])
-    client.test()
-    return client
+# def connect_marathon():
+#     client = MarathonClient(flask_app.config["MARATHON"])
+#     client.test()
+#     return client
 
-
+CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "xds_cluster")
+    # Seconds between polls of our service
+REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
 def get_marathon():
-    if not hasattr(g, "marathon"):
-        g.marathon = connect_marathon()
-    return g.marathon
+    def get_app(app_id, embed=["app.tasks"]):
+        return {
+                                    "id": "/myapp",
+                                    "args": "null",
+                                    "user": "null",
+                                    "env": {
+                                    "LD_LIBRARY_PATH": "/usr/local/lib/myLib"
+                                    },
+                                    "instances": 3
+                }
+
+
+    def get_apps():
+        apps={
+                "apps": [
+                                {
+                                    "id": "/myapp",
+                                    "args": "null",
+                                    "user": "null",
+                                    "env": {
+                                    "LD_LIBRARY_PATH": "/usr/local/lib/myLib"
+                                    },
+                                    "instances": 3,
+
+                                    "constraints": [
+                                    [
+                                        "hostname",
+                                        "UNIQUE",
+                                        ""
+                                    ]
+                                    ],
+                                    "uris": [
+                                    "https://raw.github.com/mesosphere/marathon/master/README.md"
+                                    ],
+                                    "ports": [
+                                    10013,
+                                    10015
+                                    ]
+                                    }
+                    ]
+        }
+        return apps
+    return  {"get_apps":get_apps,"get_app":get_app}
+
+    
+    # if not hasattr(g, "marathon"):
+    #     g.marathon = connect_marathon()
+    # return g.marathon
+    return get_apps
 
 
 def connect_vault():
-    if flask_app.config["VAULT_TOKEN"] is None:
-        flask_app.logger.warn(
-            "VAULT_TOKEN config option not set. Unable to create Vault client."
-        )
-        return None
+    # if flask_app.config["VAULT_TOKEN"] is None:
+    #     flask_app.logger.warn(
+    #         "VAULT_TOKEN config option not set. Unable to create Vault client."
+    #     )
+    #     return None
 
     client = VaultClient(
         flask_app.config["VAULT"], flask_app.config["VAULT_TOKEN"],
@@ -64,8 +117,8 @@ def own_config_source():
     The config to connect to this API. For specifying the EDS and RDS
     endpoints.
     """
-    return ConfigSource(flask_app.config["CLUSTER_NAME"],
-                        flask_app.config["REFRESH_DELAY"])
+    return ConfigSource(CLUSTER_NAME,#flask_app.config["CLUSTER_NAME"],
+                        REFRESH_DELAY)#flask_app.config["REFRESH_DELAY"])
 
 
 def truncate_object_name(object_name):
@@ -134,31 +187,41 @@ def is_port_in_group(app_labels, port_index):
 
 
 def default_healthcheck():
-    return HealthCheck(
-        flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],
-        flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"],
-        flask_app.config["CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD"],
-        flask_app.config["CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD"])
+    health= HealthCheck(
+        CLUSTER_HEALTHCHECK_TIMEOUT,#,flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],
+        CLUSTER_HEALTHCHECK_INTERVAL,#flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"],
+        CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD,#flask_app.config["CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD"],
+        CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD)#flask_app.config["CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD"])
+    print(" halth", health)
+    return health
 
 
 @flask_app.route("/v2/discovery:clusters", methods=["POST"])
 def clusters():
     clusters = []
     max_version = "0"
-    for app in get_marathon().get_apps():
-        for port_index in range(get_number_of_app_ports(app)):
-            if not is_port_in_group(app["labels"], port_index):
-                continue
+    # for app in get_marathon()["get_apps"]():
+    #     print("app:",app)
+    #     for port_index in range(get_number_of_app_ports(app)):
+    #         if not is_port_in_group(app["labels"], port_index):
+    #             continue
 
-            max_version = max(
-                max_version, app["versionInfo"]["lastConfigChangeAt"])
+    #         max_version = max(
+    #             max_version, app["versionInfo"]["lastConfigChangeAt"])
 
-            cluster_name, service_name = app_cluster(app["id"], port_index)
+    #         cluster_name, service_name = app_cluster(app["id"], port_index)
 
-            clusters.append(Cluster(
-                cluster_name, service_name, own_config_source(),
-                flask_app.config["CLUSTER_CONNECT_TIMEOUT"],
-                health_checks=[default_healthcheck()]))
+    cluster_name="my-cluster"
+    service_name="svc1"
+
+
+    MAX_OBJECT_NAME_LENGTH = 60
+
+    clusters.append(Cluster(
+        cluster_name, service_name, own_config_source(),
+        CLUSTER_CONNECT_TIMEOUT,#flask_app.config["CLUSTER_CONNECT_TIMEOUT"],
+        health_checks=[default_healthcheck()]))
+    print(" =========get cluster success......")
 
     return jsonify(DiscoveryResponse(max_version, clusters, TYPE_CDS))
 
@@ -198,7 +261,7 @@ def endpoints():
         app_id, port_index = cluster_name.rsplit("_", 1)
         port_index = int(port_index)
 
-        app = get_marathon().get_app(app_id, embed=["app.tasks"])
+        app = get_marathon["get_app"](app_id, embed=["app.tasks"])
 
         # We have to check these things because they may have changed since the
         # CDS request was made--this is normal behaviour.
@@ -235,12 +298,21 @@ def endpoints():
 
 
 def default_http_conn_manager_filters(name):
+    print(" default_http_conn_manager_filters called.")
     return [
         Filter("envoy.http_connection_manager",
                # Params are: name, stats_prefix, api_config_source
                HttpConnectionManager(name, name, own_config_source()))
     ]
 
+# def default_http_conn_manager_filters_lua(name):
+#     print(" default_http_conn_manager_filters called.")
+#      #"name": "envoy.filters.http.lua",
+#     return [
+#         Filter("envoy.filters.http.lua",
+#                # Params are: name, stats_prefix, api_config_source
+#                HttpConnectionManager(name, name, own_config_source()))
+#     ]
 
 def http_filter_chains():
     return [FilterChain(default_http_conn_manager_filters("http"))]
@@ -263,6 +335,7 @@ def _get_cached_cert(domain, cert_id):
 
 def _get_vault_cert(domain):
     cert = get_vault().get("/certificates/" + domain)
+    cert=True
     if cert is None:
         flask_app.logger.warn(
             "Certificate not found in Vault for domain %s", domain)
@@ -278,12 +351,14 @@ def _get_vault_cert(domain):
             "Error parsing Vault certificate for domain %s: %s", domain, e)
         return None
 
+VAULT = os.environ.get("VAULT", "http://127.0.0.1:8200")
+VAULT_TOKEN = os.environ.get("VAULT_TOKEN")
 
 def get_certificates():
     if not hasattr(g, "_certificates"):
         g._certificates = {}
 
-    vault_client = get_vault()
+    vault_client = True# get_vault()
     if vault_client is None:
         flask_app.logger.warn("Unable to fetch certificates: no Vault client.")
         return {}
@@ -314,7 +389,7 @@ def get_certificates():
     return {domain: (fullchain_pem_str(certs, chain), key_pem_str(key))
             for domain, (certs, chain, key) in certificates.items()}
 
-
+#curl -X POST localhost:5000/v2/discovery:listeners
 def https_filter_chains():
     # NOTE: Filters must be identical across FilterChains for a given listener.
     # Currently, Envoy only supports multiple FilterChains in order to support
@@ -323,12 +398,14 @@ def https_filter_chains():
 
     # Fetch the certs from Vault
     filter_chains = []
-    certificates = get_certificates()
-    for domain, (cert_chain, private_key) in sorted(certificates.items()):
-        # TODO: Read domains from certificate to support SAN
-        tls_context = CommonTlsContext(cert_chain, private_key)
-        filter_chains.append(FilterChain(
-            filters, sni_domains=[domain], common_tls_context=tls_context))
+    # certificates = get_certificates()
+    # for domain, (cert_chain, private_key) in sorted(certificates.items()):
+    #     # TODO: Read domains from certificate to support SAN
+    #     tls_context = CommonTlsContext(cert_chain, private_key)
+    domain="com"
+    tls_context={}
+    filter_chains.append(FilterChain(
+        filters, sni_domains=[domain]))# common_tls_context=tls_context))
     return filter_chains
 
 
@@ -337,17 +414,19 @@ def listeners():
     listeners = [
         Listener(
             "http",
-            flask_app.config["HTTP_LISTEN_ADDR"],
-            flask_app.config["HTTP_LISTEN_PORT"],
+            "127.0.0.1",#flask_app.config["HTTP_LISTEN_ADDR"],
+            80,#flask_app.config["HTTP_LISTEN_PORT"],
             http_filter_chains()
         ),
         Listener(
             "https",
-            flask_app.config["HTTPS_LISTEN_ADDR"],
-            flask_app.config["HTTPS_LISTEN_PORT"],
+            "127.0.0.1",#lask_app.config["HTTPS_LISTEN_ADDR"],
+            443,#flask_app.config["HTTPS_LISTEN_PORT"],
             https_filter_chains()
         )
     ]
+
+    print(" ========get listerner success..")
 
     return jsonify(DiscoveryResponse("0", listeners, TYPE_LDS))
 
@@ -391,7 +470,7 @@ def routes():
     discovery_request = request.get_json(force=True)
     resource_names = discovery_request["resource_names"]
 
-    apps = get_marathon().get_apps()
+    apps = get_marathon()["get_apps"]()
 
     route_configurations = []
     max_version = "0"
@@ -419,4 +498,8 @@ def routes():
 
 
 if __name__ == "__main__":  # pragma: no cover
+    apps = get_marathon()["get_apps"]()
+    app=get_marathon()["get_app"]("app1")
+    print(app)
+    print(" xDS running on port: ", 5000)
     flask_app.run()

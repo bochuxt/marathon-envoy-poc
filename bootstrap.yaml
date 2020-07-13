@@ -1,3 +1,7 @@
+
+node:
+  id: envoy-1
+  cluster: envoy-cluser
 admin:
   access_log_path: /tmp/admin_access.log
   address:

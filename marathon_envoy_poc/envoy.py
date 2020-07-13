@@ -71,34 +71,78 @@ def DiscoveryResponse(version_info, resources, type_url):
 def Cluster(name, service_name, eds_config, connect_timeout, type="EDS",
             lb_policy="ROUND_ROBIN", health_checks=[]):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/cds.proto#cluster
+
+    '''
+    - name: web_service
+    connect_timeout: 0.25s
+    type: strict_dns # static
+    lb_policy: round_robin
+    load_assignment:
+      cluster_name: web_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: web_service
+                port_value: 80
+
+    '''
+
+    
+
     return {
-        "name": name,
-        "type": type,
-        "eds_cluster_config": {
-            "eds_config": eds_config,
-            "service_name": service_name,
-        },
-        "connect_timeout": Duration(connect_timeout),
-        # "per_connection_buffer_limit_bytes": "{...}",
-        "lb_policy": lb_policy,
-        # "hosts": [],
-        "health_checks": health_checks,
-        # "max_requests_per_connection": "{...}",
-        # "circuit_breakers": "{...}",
-        # "tls_context": "{...}",
-        # TODO: Support connecting to clusters with HTTP/2
-        "http_protocol_options": {},
-        # "http2_protocol_options": "{...}",
-        # "dns_refresh_rate": "{...}",
-        # "dns_lookup_family": "...",
-        # "dns_resolvers": [],
-        # "outlier_detection": "{...}",
-        # "cleanup_interval": "{...}",
-        # "upstream_bind_config": "{...}",
-        # "lb_subset_config": "{...}",
-        # "ring_hash_lb_config": "{...}",
-        # "transport_socket": "{...}"
-    }
+       "name": "web_service",
+       "type": "STRICT_DNS",
+       "connect_timeout": "0.250s",
+       "load_assignment": {
+        "cluster_name": "web_service",
+        "endpoints": [
+         {
+          "lb_endpoints": [
+           {
+            "endpoint": {
+             "address": {
+              "socket_address": {
+               "address": "localhost",
+               "port_value": 80
+              }
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      }
+    #     return {
+    #     "name": name,
+    #     "type": type,
+    #     "eds_cluster_config": {
+    #         "eds_config": eds_config,
+    #         "service_name": service_name,
+    #     },
+    #     "connect_timeout": Duration(connect_timeout),
+    #     # "per_connection_buffer_limit_bytes": "{...}",
+    #     "lb_policy": lb_policy,
+    #     # "hosts": [],
+    #     "health_checks": health_checks,
+    #     # "max_requests_per_connection": "{...}",
+    #     # "circuit_breakers": "{...}",
+    #     # "tls_context": "{...}",
+    #     # TODO: Support connecting to clusters with HTTP/2
+    #     "http_protocol_options": {},
+    #     # "http2_protocol_options": "{...}",
+    #     # "dns_refresh_rate": "{...}",
+    #     # "dns_lookup_family": "...",
+    #     # "dns_resolvers": [],
+    #     # "outlier_detection": "{...}",
+    #     # "cleanup_interval": "{...}",
+    #     # "upstream_bind_config": "{...}",
+    #     # "lb_subset_config": "{...}",
+    #     # "ring_hash_lb_config": "{...}",
+    #     # "transport_socket": "{...}"
+    # }
 
 
 def Address(address, port):
@@ -233,6 +277,14 @@ def HttpConnectionManager(stat_prefix, route_config_name, rds_config_source):
             "route_config_name": route_config_name,
         },
         "http_filters": [
+ 
+            {
+                "name": "envoy.filters.http.lua",
+                "typed_config": {
+                                    "@type": "type.googleapis.com/envoy.config.filter.http.lua.v2.Lua",
+                                    "inline_code": "function envoy_on_request(request_handle)\n\n\n  local message=\"=========AAAAABBBBCCCCC============\"\n  request_handle:logTrace(message)\n  request_handle:logDebug(message)\n  request_handle:logInfo(message)\n  request_handle:logWarn(message)\n  request_handle:logErr(message)\n  request_handle:logCritical(message)\n\n  request_handle:headers():add(\"foo\", \"bar\")\nend\nfunction envoy_on_response(response_handle)\n  local message=\"=========response called============\"\n  response_handle:logTrace(message)\n  body_size = response_handle:body():length()\n  response_handle:headers():add(\"response-body-size\", tostring(body_size))\nend\n"
+                                    }
+            },
             {
                 "name": "envoy.router",
                 "config": {
@@ -241,7 +293,8 @@ def HttpConnectionManager(stat_prefix, route_config_name, rds_config_source):
                     # TODO: Make access logs configurable
                     "upstream_log": AccessLog("upstream.log"),
                 },
-            }
+            },
+            
         ],
         # "add_user_agent": "{...}",
         # "tracing": "{...}",

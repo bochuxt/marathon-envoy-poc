@@ -14,9 +14,7 @@ class _ConfigBase:
         "LABEL_PREFIX_MARATHON_LB", "HAPROXY")
 
     # Name of our service in Envoy
-    CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "xds_cluster")
-    # Seconds between polls of our service
-    REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
+  
 
     VAULT = os.environ.get("VAULT", "http://127.0.0.1:8200")
     VAULT_TOKEN = os.environ.get("VAULT_TOKEN")
@@ -25,6 +23,7 @@ class _ConfigBase:
 
     HTTP_LISTEN_ADDR = os.environ.get("HTTP_LISTEN_ADDR", "0.0.0.0")
     HTTP_LISTEN_PORT = os.environ.get("HTTP_LISTEN_PORT", 80)
+
     HTTPS_LISTEN_ADDR = os.environ.get("HTTPS_LISTEN_ADDR", "0.0.0.0")
     HTTPS_LISTEN_PORT = os.environ.get("HTTPS_LISTEN_PORT", 443)
 
