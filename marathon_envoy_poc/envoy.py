@@ -105,7 +105,7 @@ def Cluster(name, service_name, eds_config, connect_timeout, type="EDS",
              "address": {
               "socket_address": {
                "address": "localhost",
-               "port_value": 80
+               "port_value": 8090
               }
              }
             }

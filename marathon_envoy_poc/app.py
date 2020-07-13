@@ -474,20 +474,58 @@ def routes():
 
     route_configurations = []
     max_version = "0"
+    print("=====routes processed.[route_config_name]  ",resource_names)
     for route_config_name in resource_names:
         if route_config_name not in ["http", "https"]:
             flask_app.logger.warn(
                 "Unknown route config name: %s", route_config_name)
             continue
 
-        virtual_hosts = []
+        virtual_hosts = [
+                {
+                 "name": "local_service",
+                 "domains": [
+                  "*"
+                 ],
+                 "routes": [
+                  {
+                   "match": {
+                    "prefix": "/svc"
+                   },
+                   "route": {
+                    "cluster": "web_service",
+                    "prefix_rewrite": "/"
+                   }
+                  },
+                  {
+                   "match": {
+                    "prefix": "/waf"
+                   },
+                   "route": {
+                    "cluster": "waf",
+                    "prefix_rewrite": "/"
+                   }
+                  },
+                  {
+                   "match": {
+                    "prefix": "/app"
+                   },
+                   "route": {
+                    "cluster": "app",
+                    "prefix_rewrite": "/"
+                   }
+                  }
+                 ]
+                }
+               ]
+              #},
         # This part is similar to CDS
-        for app in apps:
-            app_vhosts = get_app_virtual_hosts(app)
-            if app_vhosts:
-                virtual_hosts.extend(app_vhosts)
-                max_version = max(
-                    max_version, app["versionInfo"]["lastConfigChangeAt"])
+        # for app in apps:
+        #     app_vhosts = get_app_virtual_hosts(app)
+        #     if app_vhosts:
+        #         virtual_hosts.extend(app_vhosts)
+        #         max_version = max(
+        #             max_version, app["versionInfo"]["lastConfigChangeAt"])
 
         # TODO: internal_only_headers
         route_configurations.append(
