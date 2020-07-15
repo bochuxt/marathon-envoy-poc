@@ -2,6 +2,7 @@ import binascii
 import os
 
 from flask import Flask, g, jsonify, request
+from flask_cors import CORS
 
 from certs import (
     cert_fingerprint, fullchain_pem_str, key_pem_str, load_cert_obj,
@@ -13,10 +14,11 @@ from envoy import (
 from marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports)
 from vault import VaultClient
-
+from filtermanager import updateFilter, getFilters
 # Don't name the flask app 'app' as is usually done as it's easy to mix up with
 # a Marathon app
 flask_app = Flask(__name__)
+cors = CORS(flask_app, resources={r"/v2/monica/*": {"origins": "*"}})
 # flask_app.config.from_object(
 #     os.environ.get("APP_CONFIG", "marathon_envoy_poc.config.DevConfig"))
 
@@ -408,25 +410,46 @@ def https_filter_chains():
         filters, sni_domains=[domain]))# common_tls_context=tls_context))
     return filter_chains
 
+@flask_app.route("/v2/monica/getfilters", methods=["GET"])
+def getfiler():
+    filters=getFilters()
+    return jsonify(filters)
+
+@flask_app.route("/v2/monica/updatefilters", methods=["POST"])
+def updatefiler():
+    try:
+        print(" update filter called")
+        request_data = request.get_json()
+            #print(request_data)
+        print(" update filter received...",request_data)
+        print("\n"+request_data.get("filterCode"))
+        newFilter=updateFilter(request_data.get("filterCode"))
+        #filters=getFilters()
+        return jsonify(newFilter)
+    except Exception as e:
+        print("update filters", e)
+
 
 @flask_app.route("/v2/discovery:listeners", methods=["POST"])
 def listeners():
+    http_port=8000
+    https_port=4430
     listeners = [
         Listener(
             "http",
             "127.0.0.1",#flask_app.config["HTTP_LISTEN_ADDR"],
-            80,#flask_app.config["HTTP_LISTEN_PORT"],
+            http_port,#flask_app.config["HTTP_LISTEN_PORT"],
             http_filter_chains()
         ),
         Listener(
             "https",
             "127.0.0.1",#lask_app.config["HTTPS_LISTEN_ADDR"],
-            443,#flask_app.config["HTTPS_LISTEN_PORT"],
+            https_port,#flask_app.config["HTTPS_LISTEN_PORT"],
             https_filter_chains()
         )
     ]
 
-    print(" ========get listerner success..")
+    print(" ========get listerner success.. ",http_port,https_port)
 
     return jsonify(DiscoveryResponse("0", listeners, TYPE_LDS))
 

@@ -5,3 +5,5 @@ cryptography
 flask
 pem=="20.1.0"
 requests
+redis
+flask_cors

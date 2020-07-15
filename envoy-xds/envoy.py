@@ -1,6 +1,6 @@
 import binascii
-
-
+from filtermanager import getFilters ,AccessLog
+        
 def Duration(seconds):
     # https://developers.google.com/protocol-buffers/docs/proto3#json
     return "{}s".format(seconds)
@@ -253,21 +253,12 @@ def CommonTlsContext(
     }
 
 
-def AccessLog(path):
-    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/filter/accesslog/accesslog.proto.html#envoy-api-msg-filter-accesslog-accesslog
-    return {
-        "name": "envoy.file_access_log",
-        # TODO: Support filters
-        # "filter": filter,
-        "config": {
-            "path": path,
-            # "format": "..."
-        }
-    }
+
 
 
 def HttpConnectionManager(stat_prefix, route_config_name, rds_config_source):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/filter/network/http_connection_manager.proto.html#filter-network-httpconnectionmanager
+    filters=getFilters()
     return {
         "codec_type": "AUTO",
         "stat_prefix": stat_prefix,
@@ -276,26 +267,7 @@ def HttpConnectionManager(stat_prefix, route_config_name, rds_config_source):
             "config_source": rds_config_source,
             "route_config_name": route_config_name,
         },
-        "http_filters": [
- 
-            {
-                "name": "envoy.filters.http.lua",
-                "typed_config": {
-                                    "@type": "type.googleapis.com/envoy.config.filter.http.lua.v2.Lua",
-                                    "inline_code": "function envoy_on_request(request_handle)\n\n\n  local message=\"=========AAAAABBBBCCCCC============\"\n  request_handle:logTrace(message)\n  request_handle:logDebug(message)\n  request_handle:logInfo(message)\n  request_handle:logWarn(message)\n  request_handle:logErr(message)\n  request_handle:logCritical(message)\n\n  request_handle:headers():add(\"foo\", \"bar\")\nend\nfunction envoy_on_response(response_handle)\n  local message=\"=========response called============\"\n  response_handle:logTrace(message)\n  body_size = response_handle:body():length()\n  response_handle:headers():add(\"response-body-size\", tostring(body_size))\nend\n"
-                                    }
-            },
-            {
-                "name": "envoy.router",
-                "config": {
-                    # "dynamic_stats": "{...}",
-                    # "start_child_span": "...",
-                    # TODO: Make access logs configurable
-                    "upstream_log": AccessLog("upstream.log"),
-                },
-            },
-            
-        ],
+        "http_filters": filters,#getFilters(),
         # "add_user_agent": "{...}",
         # "tracing": "{...}",
         # "http_protocol_options": "{...}",

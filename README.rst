@@ -1,18 +1,23 @@
 ==========
 # Start xDS Server:
-cd marathon_envoy_poc
-python app.py
+`cd marathon_envoy_poc
+python app.py`
 
 # Start envoy proxy
-./start-envoy.sh
+`./start-envoy.sh`
 
 # Start upstream
-./upstream.sh
+`./upstream.sh`
 
 # Veryfy control plane
 curl -X POST localhost:5000/v2/discovery:listeners
+curl -X GET localhost:5000/v2/monica/getfilters
+curl -X POST localhost:5000/v2/discovery:endpoints
 # Verify proxy config
-http://127.0.0.1:9901/config_dump
+http://127.0.0.1:9001/config_dump
+
+#verify app
+curl localhost:8000/svc -i
 
 
 envoy-poc

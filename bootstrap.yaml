@@ -5,7 +5,7 @@ node:
 admin:
   access_log_path: /tmp/admin_access.log
   address:
-    socket_address: { address: 127.0.0.1, port_value: 9901 }
+    socket_address: { address: 127.0.0.1, port_value: 8001 }
 
 dynamic_resources:
   lds_config:
