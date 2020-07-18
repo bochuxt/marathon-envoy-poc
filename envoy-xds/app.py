@@ -3,6 +3,7 @@ import os
 
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
+import json
 
 from certs import (
     cert_fingerprint, fullchain_pem_str, key_pem_str, load_cert_obj,
@@ -15,6 +16,7 @@ from marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports)
 from vault import VaultClient
 from filtermanager import updateFilter, getFilters
+from proxyInfo import getConfig,  ProxyNode,ProxyNodeEncoder#,proxyNodeList# addProxyNode, getProxyNodeList,
 # Don't name the flask app 'app' as is usually done as it's easy to mix up with
 # a Marathon app
 flask_app = Flask(__name__)
@@ -33,6 +35,19 @@ CLUSTER_HEALTHCHECK_TIMEOUT = 5
 CLUSTER_HEALTHCHECK_INTERVAL = 30
 CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD = 3
 CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD = 1
+
+proxyNodeList=set()#ProxyNode(None,None)
+def addProxyNode(node):
+    try:
+        proxyNodeList.add(node)
+    except Exception as e:
+        print(" node add failed: ", e)
+# def set_default(obj):
+#     if isinstance(obj, set):
+#         return list(obj)
+#     raise TypeError
+
+
 
 # def connect_marathon():
 #     client = MarathonClient(flask_app.config["MARATHON"])
@@ -318,7 +333,23 @@ def default_http_conn_manager_filters(name):
 
 def http_filter_chains():
     return [FilterChain(default_http_conn_manager_filters("http"))]
+#curl -X POST localhost:5000/v2/discovery:listeners
+def https_filter_chains():
+    # NOTE: Filters must be identical across FilterChains for a given listener.
+    # Currently, Envoy only supports multiple FilterChains in order to support
+    # SNI.
+    filters = default_http_conn_manager_filters("https")
 
+    # Fetch the certs from Vault
+    filter_chains = []
+    # certificates = get_certificates()
+    # for domain, (cert_chain, private_key) in sorted(certificates.items()):
+    #     # TODO: Read domains from certificate to support SAN
+    #     tls_context = CommonTlsContext(cert_chain, private_key)
+    domain="com"
+    tls_context={}
+    filter_chains.append(FilterChain(filters, sni_domains=[domain]))# common_tls_context=tls_context))
+    return filter_chains
 
 def _get_cached_cert(domain, cert_id):
     if domain in g._certificates:
@@ -391,30 +422,31 @@ def get_certificates():
     return {domain: (fullchain_pem_str(certs, chain), key_pem_str(key))
             for domain, (certs, chain, key) in certificates.items()}
 
-#curl -X POST localhost:5000/v2/discovery:listeners
-def https_filter_chains():
-    # NOTE: Filters must be identical across FilterChains for a given listener.
-    # Currently, Envoy only supports multiple FilterChains in order to support
-    # SNI.
-    filters = default_http_conn_manager_filters("https")
 
-    # Fetch the certs from Vault
-    filter_chains = []
-    # certificates = get_certificates()
-    # for domain, (cert_chain, private_key) in sorted(certificates.items()):
-    #     # TODO: Read domains from certificate to support SAN
-    #     tls_context = CommonTlsContext(cert_chain, private_key)
-    domain="com"
-    tls_context={}
-    filter_chains.append(FilterChain(
-        filters, sni_domains=[domain]))# common_tls_context=tls_context))
-    return filter_chains
 
 @flask_app.route("/v2/monica/getfilters", methods=["GET"])
 def getfiler():
     filters=getFilters()
     return jsonify(filters)
 
+@flask_app.route("/v2/monica/getproxynode", methods=["GET"])
+def getProxyNodes():
+    try:
+        global proxyNodeList 
+        #proxynodes=getProxyNodeList()
+        print(" request received...", proxyNodeList)
+        result = json.dumps(list(proxyNodeList),cls=ProxyNodeEncoder)#, default=set_default)
+        print(" request dump received...", result)
+        return result#jsonify(result)
+    except Exception as e:
+        print(" get nodes failed: ",e)
+@flask_app.route("/v2/monica/getconfig", methods=["POST"])
+def getconfig():
+    print("get config called..")
+    request_data = request.get_json()
+    admin_port=request_data.get("admin_port",8001)
+    config=getConfig(admin_port)
+    return jsonify(config)
 @flask_app.route("/v2/monica/updatefilters", methods=["POST"])
 def updatefiler():
     try:
@@ -432,8 +464,25 @@ def updatefiler():
 
 @flask_app.route("/v2/discovery:listeners", methods=["POST"])
 def listeners():
-    http_port=8000
-    https_port=4430
+    discovery_request = request.get_json(force=True)
+    #print(" listen request: ", discovery_request)
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("id"))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("cluster"))
+    print(" >>>>>  listeners service: [metadata] ", discovery_request.get("node").get("metadata"))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("locality"))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("user_agent_build_version"))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("user_agent_name")) 
+    newNode=ProxyNode(discovery_request.get("node").get("id"),discovery_request.get("node").get("cluster"), 
+    discovery_request.get("node").get("metadata"))
+    print(" new node: ", newNode)
+    addProxyNode(newNode)  
+
+
+    http_port = discovery_request.get("node").get("metadata").get("http_port",8000)#8000
+    https_port= discovery_request.get("node").get("metadata").get("https_port",4430)#4430
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("metadata").get("http_port",8000))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("metadata").get("https_port",4430))
+    print(" >>>>>  listeners service: ", discovery_request.get("node").get("metadata").get("admin_port",8001))
     listeners = [
         Listener(
             "http",
@@ -488,9 +537,16 @@ def parse_domains(domain_str):
 
 @flask_app.route("/v2/discovery:routes", methods=["POST"])
 def routes():
+    
     # Envoy does not send a 'content-type: application/json' header in this
     # request so we must set force=True
     discovery_request = request.get_json(force=True)
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("id"))
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("cluster"))
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("metadata"))
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("locality"))
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("user_agent_name"))
+    print(" >>>>>route descovery service: ", discovery_request.get("node").get("resource_names"))     
     resource_names = discovery_request["resource_names"]
 
     apps = get_marathon()["get_apps"]()

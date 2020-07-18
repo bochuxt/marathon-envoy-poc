@@ -1,15 +1,15 @@
 
 node:
-  id: customerId
-  cluster: customerId-cluser-1
+  id: customerId2
+  cluster: customerId2-cluser-1
   metadata: 
-    description: "proxy for customer 1"
-    stage: PRD
-    http_port:  8000
-    https_port: 4430
-    admin_port: 8001
+    description: "proxy for customer 2"
+    stage: DEV
+    http_port:  9000
+    https_port: 5430
+    admin_port: 8002
   locality: 
-    region: us
+    region: eu
   # extensions:
   #   - filter: 
   #     name: "decoder"
@@ -25,9 +25,9 @@ node:
   #     disabled: false
 
 admin:
-  access_log_path: /tmp/admin_access.log
+  access_log_path: /tmp/admin_access2.log
   address:
-    socket_address: { address: 127.0.0.1, port_value: 8001 }
+    socket_address: { address: 127.0.0.1, port_value: 8002 }
 
 dynamic_resources:
   lds_config:
@@ -35,12 +35,12 @@ dynamic_resources:
       api_type: REST
       # NOTE: "cluster_name" field pluralised in an unreleased version of Envoy
       cluster_names: [xds_cluster]
-      refresh_delay: 10s
+      refresh_delay: 30s
   cds_config:
     api_config_source:
       api_type: REST
       cluster_names: [xds_cluster]
-      refresh_delay: 10s
+      refresh_delay: 30s
 
 static_resources:
   clusters:

@@ -1,5 +1,5 @@
 import binascii
-from filtermanager import getFilters ,AccessLog
+from filtermanager import getFilters, AccessLog
         
 def Duration(seconds):
     # https://developers.google.com/protocol-buffers/docs/proto3#json
