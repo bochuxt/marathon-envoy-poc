@@ -14,7 +14,7 @@ curl -X POST localhost:5000/v2/discovery:listeners
 curl -X GET localhost:5000/v2/monica/getfilters
 curl -X GET localhost:5000/v2/monica/getconfig
 curl -X GET localhost:5000/v2/monica/getproxynode
-
+curl -X GET 127.0.0.1:5000/v2/monica/getfilters
 
 curl -X POST localhost:5000/v2/discovery:endpoints
 # Verify proxy config
